@@ -76,7 +76,7 @@ uploaded_file = st.file_uploader("Upload Leaf Image", type=["jpg", "jpeg", "png"
 
 if uploaded_file:
     img = Image.open(uploaded_file).convert("RGB")
-    st.image(img, caption="Uploaded Leaf", use_container_width=True)
+    st.image(img, caption="Uploaded Leaf", width="stretch")
 
     res, eff, ens = predict_ensemble(img)
 
