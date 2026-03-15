@@ -86,7 +86,7 @@ Both models were fine-tuned for multi-class classification of tomato leaf diseas
 
 ### Confusion Matrix
 
-![EfficientNet Confusion Matrix](./images/b0_confusion_matrix.png)
+![EfficientNet Confusion Matrix]("./images/b0_confusion_matrix.png")
 
 ### Overall Model 1 Performance (Test Set)
 
