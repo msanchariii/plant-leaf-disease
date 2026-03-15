@@ -1,7 +1,3 @@
-Here’s a polished **full README** combining your EfficientNet-B0 and ResNet-50 results, including the comparison table with all metrics filled. I’ve also added a small intro sentence for the comparison section. You can copy this directly into your README.md:
-
----
-
 # Plant Leaf Disease Detection With Machine Learning
 
 ## Introduction
