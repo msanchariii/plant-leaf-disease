@@ -137,3 +137,67 @@ The following table summarizes the performance of both models on the test set:
 **Observation:** EfficientNet-B0 slightly outperforms ResNet-50 across all metrics, showing its effectiveness for multi-class tomato leaf disease classification.
 
 ---
+
+## Ensemble Method
+
+To improve prediction robustness and overall classification performance, an ensemble approach was implemented by combining the outputs of two deep learning models: **ResNet-50** and **EfficientNet-B0**.
+
+### 1. Weighted Soft Voting
+
+Instead of using simple averaging, a **weighted soft voting strategy** was applied. Each model contributes to the final prediction based on its performance on the test dataset.
+
+- EfficientNet-B0 demonstrated higher accuracy (~99.7%)
+- ResNet-50 achieved slightly lower accuracy (~98.9%)
+
+Based on this, higher weight was assigned to EfficientNet-B0:
+
+- ResNet-50 weight: **0.3**
+- EfficientNet-B0 weight: **0.7**
+
+The final probability is computed as:
+
+```math
+P_{ensemble} = (0.3 \times P_{resnet}) + (0.7 \times P_{efficientnet})
+```
+
+---
+
+### 2. Agreement-Based Confidence Boost
+
+To further enhance reliability, an **agreement mechanism** was introduced:
+
+- If both models predict the same top class, the ensemble confidence is slightly increased.
+- This reflects higher certainty when both models agree on the prediction.
+
+---
+
+### 3. Confidence Thresholding (Unknown Detection)
+
+To prevent incorrect predictions on irrelevant inputs (e.g., non-leaf images), a validation mechanism was added:
+
+- Minimum confidence threshold: **60%**
+- Minimum gap between top-1 and top-2 predictions: **10%**
+
+If these conditions are not satisfied, the system rejects the prediction and labels it as uncertain.
+
+---
+
+### 4. Final Output
+
+The system displays:
+
+- Top-3 predictions for each model
+- Top-3 predictions for the ensemble
+- Final predicted class based on ensemble output
+
+---
+
+### Summary
+
+The ensemble approach improves reliability by:
+
+- Leveraging strengths of multiple models
+- Reducing individual model bias
+- Handling uncertain or invalid inputs effectively
+
+This results in a more robust and practical plant disease detection system.

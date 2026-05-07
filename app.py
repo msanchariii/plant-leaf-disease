@@ -18,9 +18,12 @@ CLASS_PATH = os.path.join(BASE_DIR, "class_names.json")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Ensemble weights (you can tune this)
-RESNET_WEIGHT = 0.4
-EFFNET_WEIGHT = 0.6
+# 🔥 Weights based on performance
+RESNET_WEIGHT = 0.3
+EFFNET_WEIGHT = 0.7
+
+CONF_THRESHOLD = 0.60   # 60% minimum confidence
+GAP_THRESHOLD = 0.10    # 10% gap required
 
 # ---------------- Load class names ----------------
 with open(CLASS_PATH, "r") as f:
@@ -62,7 +65,7 @@ transform = transforms.Compose([
     )
 ])
 
-# ---------------- Helper: Top-3 ----------------
+# ---------------- Top-3 Helper ----------------
 def decode_top3(prob):
     top_probs, top_idxs = torch.topk(prob, 3)
 
@@ -74,6 +77,23 @@ def decode_top3(prob):
 
     return results
 
+# ---------------- Ensemble Logic ----------------
+def weighted_ensemble(r_prob, e_prob):
+    # Weighted voting
+    ens = (RESNET_WEIGHT * r_prob + EFFNET_WEIGHT * e_prob)
+
+    # 🔥 Agreement Boost
+    r_top = torch.argmax(r_prob)
+    e_top = torch.argmax(e_prob)
+
+    if r_top == e_top:
+        ens = ens * 1.1  # boost confidence if both agree
+
+    # Normalize again (important after scaling)
+    ens = ens / ens.sum(dim=1, keepdim=True)
+
+    return ens
+
 # ---------------- Prediction ----------------
 def predict_ensemble(img):
     x = transform(img).unsqueeze(0).to(DEVICE)
@@ -83,11 +103,7 @@ def predict_ensemble(img):
 
         if effnet is not None:
             e_prob = F.softmax(effnet(x), dim=1)
-
-            # 🔥 Weighted Ensemble (better than simple average)
-            ens_prob = (RESNET_WEIGHT * r_prob + EFFNET_WEIGHT * e_prob) / (
-                RESNET_WEIGHT + EFFNET_WEIGHT
-            )
+            ens_prob = weighted_ensemble(r_prob, e_prob)
         else:
             e_prob = None
             ens_prob = r_prob
@@ -96,18 +112,19 @@ def predict_ensemble(img):
     eff = decode_top3(e_prob) if e_prob is not None else []
     ens = decode_top3(ens_prob)
 
-    return res, eff, ens
+    return res, eff, ens, ens_prob
 
+# ---------------- Unknown Detection ----------------
+def is_valid_prediction(ens_prob):
+    top_probs, _ = torch.topk(ens_prob, 2)
 
-# for unknown objects
-def is_valid_prediction(top3, conf_threshold=60, gap_threshold=10):
-    top1_conf = top3[0][1]
-    top2_conf = top3[1][1]
+    top1 = top_probs[0][0].item()
+    top2 = top_probs[0][1].item()
 
-    if top1_conf < conf_threshold:
+    if top1 < CONF_THRESHOLD:
         return False
 
-    if (top1_conf - top2_conf) < gap_threshold:
+    if (top1 - top2) < GAP_THRESHOLD:
         return False
 
     return True
@@ -115,7 +132,7 @@ def is_valid_prediction(top3, conf_threshold=60, gap_threshold=10):
 # ---------------- UI ----------------
 st.title("🍅 Tomato Leaf Disease Detection")
 st.write(
-    "Upload a tomato leaf image to identify possible diseases using an ensemble of deep learning models."
+    "Upload a tomato leaf image to identify diseases using an ensemble of deep learning models."
 )
 
 uploaded_file = st.file_uploader(
@@ -127,9 +144,9 @@ if uploaded_file:
     img = Image.open(uploaded_file).convert("RGB")
     st.image(img, caption="Uploaded Image", width="stretch")
 
-    res, eff, ens = predict_ensemble(img)
+    res, eff, ens, ens_prob = predict_ensemble(img)
 
-    # ---------------- Format Table ----------------
+    # ---------------- Table ----------------
     def format_top3(results):
         return "\n".join([
             f"{i+1}. {cls} ({conf:.2f}%)"
@@ -143,7 +160,7 @@ if uploaded_file:
             "Model": [
                 "ResNet50",
                 "EfficientNet-B0",
-                "Ensemble (Final Prediction)"
+                "Ensemble (Final)"
             ],
             "Top-3 Predictions": [
                 format_top3(res),
@@ -153,10 +170,7 @@ if uploaded_file:
         }
     else:
         table = {
-            "Model": [
-                "ResNet50",
-                "Ensemble (Final Prediction)"
-            ],
+            "Model": ["ResNet50", "Ensemble (Final)"],
             "Top-3 Predictions": [
                 format_top3(res),
                 format_top3(ens)
@@ -165,20 +179,17 @@ if uploaded_file:
 
     st.table(table)
 
-    # ---------------- Highlight Final Prediction ----------------
+    # ---------------- Final Prediction ----------------
     st.markdown("### Final Prediction")
-    # final_class, final_conf = ens[0]
-    # st.success(f"{final_class} ({final_conf:.2f}% confidence)")
-    is_valid = is_valid_prediction(ens)
 
-    if not is_valid:
-        st.error("The uploaded image does not appear to be a tomato leaf or the model is uncertain.")
+    if not is_valid_prediction(ens_prob):
+        st.error("The image is not a tomato leaf or prediction is uncertain.")
     else:
         final_class, final_conf = ens[0]
         st.success(f"{final_class} ({final_conf:.2f}% confidence)")
 
-    # ---------------- Note ----------------
+    # ---------------- Info ----------------
     st.info(
-        "Note: The system is trained specifically on tomato leaf diseases. "
-        "Predictions for non-tomato images may be unreliable."
+        "This system uses weighted ensemble learning with confidence thresholding "
+        "to improve reliability and reduce incorrect predictions."
     )
